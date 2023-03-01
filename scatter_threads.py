@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 
 import argparse
 import cv2
@@ -40,13 +41,25 @@ def getVideoFrames(videoPath):
 
     return frames
 
+def generateAdjMat(scatterPoints, neighborThreshold):
+    # Construct the adjacency matrix
+    distanceMat = np.zeros((scatterPoints.shape[0], scatterPoints.shape[0]))
 
-def scatterThreads(inputPath, outputPath, regionOfInterest, threshold, frameSpacing, dsFactor, fps, dtheta, interactive):
+    # Calculate node-node distances
+    for i in range(scatterPoints.shape[-1]):
+        distanceMat += np.subtract.outer(scatterPoints[:,i], scatterPoints[:,i])**2
+
+    adjMat = np.where(distanceMat < neighborThreshold**2, 1, 0)
+
+    return adjMat
+
+
+def scatterThreads(inputPath, outputPath, regionOfInterest, threshold, frameSpacing, dsFactor, fps, dtheta, interactive, showNeighbors):
 
     frames = loadImages(inputPath)
 
     # Crop to ROI
-    frames = [v[regionOfInterest[0][0]:regionOfInterest[0][1],regionOfInterest[1][0]:regionOfInterest[1][1]] for v in videoFrames] 
+    frames = [v[regionOfInterest[0][0]:regionOfInterest[0][1],regionOfInterest[1][0]:regionOfInterest[1][1]] for v in frames] 
     print(f'Loaded {len(frames)} images.')
 
     thresholdFrames = np.zeros((len(frames), *frames[0].shape[:2]))
@@ -62,21 +75,30 @@ def scatterThreads(inputPath, outputPath, regionOfInterest, threshold, frameSpac
 
         scatterPoints += [(*p, frameSpacing*i) for p in planarPoints]
 
-    scatterPoints = np.array(scatterPoints)
-    
+    scatterPoints = np.array(scatterPoints)[::dsFactor]
+
+    if showNeighbors:
+        numNeighbors = np.sum(generateAdjMat(scatterPoints, 25), axis=1) - 1
+    else:
+        numNeighbors = np.zeros(scatterPoints.shape[0])
+
     images = []
     loop = 0
 
-    for i in tqdm.tqdm(range(int(360 / dtheta)), desc='Generating movie'):
-        fig = plt.figure(figsize=(7,7))
+    for i in tqdm.tqdm(range(int(360 / dtheta)), desc='Generating movie') if not interactive else range(1):
+        fig = plt.figure(figsize=(9,9))
 
         ax = fig.add_subplot(projection='3d')
 
-        ax.scatter(scatterPoints[::dsFactor,2], scatterPoints[::dsFactor,1], scatterPoints[::dsFactor,0], s=.2)
+        scatterPlot = ax.scatter(scatterPoints[:,2], scatterPoints[:,1], scatterPoints[:,0], s=.2, c=numNeighbors, norm=LogNorm())
         #ax.set_zlim([0, regionOfInterest[0][1] - regionOfInterest[0][0]])
         #ax.set_ylim([0, regionOfInterest[1][1] - regionOfInterest[1][0]])
         ax.view_init(-160, i*dtheta)
         
+        if showNeighbors:
+            colorbar = fig.colorbar(scatterPlot, orientation='horizontal')
+            colorbar.set_label('Neighbors')
+
         fig.tight_layout()
 
         if interactive:
@@ -107,13 +129,16 @@ if __name__ == '__main__':
     parser.add_argument('--fps', dest='fps', type=int, help='FPS of output gif', default=20)
     parser.add_argument('--spacing', dest='spacing', type=float, help='Step spacing along scan direction', default=1)
     parser.add_argument('--dt', dest='dtheta', type=float, help='Difference in angle between each subsequent view', default=1)
-    parser.add_argument('--interactive', dest='interactive', type=bool, help='Whether to show an interactive plot instead of saving a movie', action='store_const', const=True, default=False)
+    parser.add_argument('--interactive', dest='interactive', help='Whether to show an interactive plot instead of saving a movie', action='store_const', const=True, default=False)
+    parser.add_argument('--neighbors', dest='neighbors', help='Whether to color scatter points based on the number of neighbors', action='store_const', const=True, default=False)
 
     args = parser.parse_args()
 
     regionOfInterest = [[1400, 3750], # y
                         [2300, 5400]] # x
 
+    #regionOfInterest = [[None, None], [None, None]]
+
     scatterThreads(args.inputPath, args.outputPath, regionOfInterest,
                    args.threshold, args.spacing, args.downsample, args.fps,
-                   args.dtheta, args.interactive)
+                   args.dtheta, args.interactive, args.neighbors)
