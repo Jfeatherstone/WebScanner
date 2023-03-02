@@ -13,33 +13,40 @@ IMAGE_EXTENSIONS = ['jpg', 'png', 'tif']
 
 def loadImages(path, n=None):
     if path[-3:].lower() in VIDEO_EXTENSIONS:
-        return getVideoFrames(path)
+        cam = cv2.VideoCapture(path)
+        
+        i = 0
+        while(True):
+            if n and i > n:
+                break
+
+            ret, frame = cam.read()
+
+            if ret:
+                yield frame.astype(np.uint8)
+                i += 1
+            else:
+                break
     
     elif os.path.isdir(path):
-        images = []
-        #images = [cv2.imread(path + '/' + f) for f in os.listdir(path)[:None] if f[-3:] in IMAGE_EXTENSIONS]
+
         for f in tqdm.tqdm(np.sort(os.listdir(path)[:n])):
+
             if f[-3:].lower() in IMAGE_EXTENSIONS:
-                images.append(cv2.imread(path + '/' + f))
-            
-        return images
+                yield np.array(cv2.imread(path + '/' + f)).astype(np.uint8)
 
 
-def getVideoFrames(videoPath):
-    cam = cv2.VideoCapture(videoPath)
+def getNumFrames(path, n=None):
+ 
+    if path[-3:].lower() in VIDEO_EXTENSIONS:
+        cam = cv2.VideoCapture(path)
+        length = int(cam.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    frames = []
+    elif os.path.isdir(path):
+        length = len([p for p in os.listdir(path) if p[-3:].lower() in IMAGE_EXTENSIONS])
 
-    while(True):
-        ret, frame = cam.read()
+    return length if not n else np.min(length, n)
 
-        if ret:
-            frames.append(frame.astype(np.uint8))
-
-        else:
-            break
-
-    return frames
 
 def generateAdjMat(scatterPoints, neighborThreshold):
     # Construct the adjacency matrix
@@ -53,32 +60,45 @@ def generateAdjMat(scatterPoints, neighborThreshold):
 
     return adjMat
 
+def calculateNumNeighbors(scatterPoints, neighborThreshold):
+
+    numNeighbors = np.zeros(scatterPoints.shape[0])
+
+    for i in range(scatterPoints.shape[0]):
+        distances = np.sum((scatterPoints[i] - scatterPoints[:])**2, axis=-1)
+        numNeighbors[i] = len(np.where(distances < neighborThreshold**2)[0])
+
+    return numNeighbors
+        
 
 def scatterThreads(inputPath, outputPath, regionOfInterest, threshold, frameSpacing, dsFactor, fps, dtheta, interactive, showNeighbors):
 
-    frames = loadImages(inputPath)
-
-    # Crop to ROI
-    frames = [v[regionOfInterest[0][0]:regionOfInterest[0][1],regionOfInterest[1][0]:regionOfInterest[1][1]] for v in frames] 
-    print(f'Loaded {len(frames)} images.')
-
-    thresholdFrames = np.zeros((len(frames), *frames[0].shape[:2]))
-
-    for i in range(len(thresholdFrames)):
-        thresholdFrames[i] = frames[i][:,:,1]
-        thresholdFrames[i][np.where(thresholdFrames[i] < threshold)] = 0
-
     scatterPoints = []
+    
+    i = 0
+    # It's best to load the images through a generator, since we then don't
+    # need to have every image active at the same time
+    for image in tqdm.tqdm(loadImages(inputPath), desc='Processing images', total=getNumFrames(inputPath)):
 
-    for i in range(len(thresholdFrames)):
-        planarPoints = np.array(np.where(thresholdFrames[i] > 0)).T
+        # Crop to ROI
+        croppedImage = image[regionOfInterest[0][0]:regionOfInterest[0][1],regionOfInterest[1][0]:regionOfInterest[1][1]]
+         
+        # Take threshold
+        thresholdFrame = croppedImage
+        thresholdFrame[np.where(thresholdFrame < threshold)] = 0
 
+        # Find non-zero pixel values and save their coordinates
+        planarPoints = np.array(np.where(thresholdFrame > 0)).T
         scatterPoints += [(*p, frameSpacing*i) for p in planarPoints]
+        i += 1
 
+    # Downsample
     scatterPoints = np.array(scatterPoints)[::dsFactor]
+    print(scatterPoints.shape)
+    
 
     if showNeighbors:
-        numNeighbors = np.sum(generateAdjMat(scatterPoints, 25), axis=1) - 1
+        numNeighbors = calculateNumNeighbors(scatterPoints, 25) - 1#np.sum(generateAdjMat(scatterPoints, 25), axis=1) - 1
     else:
         numNeighbors = np.zeros(scatterPoints.shape[0])
 
@@ -97,7 +117,7 @@ def scatterThreads(inputPath, outputPath, regionOfInterest, threshold, frameSpac
         
         if showNeighbors:
             colorbar = fig.colorbar(scatterPlot, orientation='horizontal')
-            colorbar.set_label('Neighbors')
+            colorbar.set_label('Neighbors', fontsize=18)
 
         fig.tight_layout()
 
@@ -134,10 +154,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    regionOfInterest = [[1400, 3750], # y
-                        [2300, 5400]] # x
+    #regionOfInterest = [[1400, 3750], # y
+    #                    [2300, 5400]] # x
 
-    #regionOfInterest = [[None, None], [None, None]]
+    regionOfInterest = [[None, None], [None, None]]
 
     scatterThreads(args.inputPath, args.outputPath, regionOfInterest,
                    args.threshold, args.spacing, args.downsample, args.fps,
