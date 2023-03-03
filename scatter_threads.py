@@ -60,13 +60,15 @@ def generateAdjMat(scatterPoints, neighborThreshold):
 
     return adjMat
 
-def calculateNumNeighbors(scatterPoints, neighborThreshold):
+def calculateNumNeighbors(scatterPoints, neighborThreshold, maxNeighbors):
 
     numNeighbors = np.zeros(scatterPoints.shape[0])
+    includedPoints = np.ones(scatterPoints.shape[0], dtype=bool)
 
-    for i in range(scatterPoints.shape[0]):
-        distances = np.sum((scatterPoints[i] - scatterPoints[:])**2, axis=-1)
+    for i in tqdm.tqdm(range(scatterPoints.shape[0]), desc='Computing neighbors'):
+        distances = np.sum((scatterPoints[i] - scatterPoints[includedPoints])**2, axis=-1)
         numNeighbors[i] = len(np.where(distances < neighborThreshold**2)[0])
+        includedPoints[i] = numNeighbors[i] <= maxNeighbors
 
     return numNeighbors
         
@@ -98,7 +100,7 @@ def scatterThreads(inputPath, outputPath, regionOfInterest, threshold, frameSpac
     
 
     if showNeighbors:
-        numNeighbors = calculateNumNeighbors(scatterPoints, 25) - 1#np.sum(generateAdjMat(scatterPoints, 25), axis=1) - 1
+        numNeighbors = calculateNumNeighbors(scatterPoints, 25, 50) - 1
     else:
         numNeighbors = np.zeros(scatterPoints.shape[0])
 
@@ -154,10 +156,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    #regionOfInterest = [[1400, 3750], # y
-    #                    [2300, 5400]] # x
+    regionOfInterest = [[1400, 3750], # y
+                        [2300, 5400]] # x
 
-    regionOfInterest = [[None, None], [None, None]]
+    #regionOfInterest = [[None, None], [None, None]]
 
     scatterThreads(args.inputPath, args.outputPath, regionOfInterest,
                    args.threshold, args.spacing, args.downsample, args.fps,
