@@ -168,6 +168,7 @@ def batchCalculateNumNeighbors(scatterPoints, neighborThreshold, maxNeighbors=30
             numNeighbors = calculateNumNeighbors(pointGroups[i], neighborThreshold, int(maxNeighbors/numGroups))
             # Determine which ones will be removed
             includedPoints = np.array(numNeighbors < int(maxNeighbors/numGroups), dtype=bool)
+            print(np.unique(includedPoints, return_counts=True))
             # Remove them
             pointGroups[i] = pointGroups[i][includedPoints,:]
 
@@ -263,7 +264,7 @@ def scatterThreads(inputPath, outputPath, regionOfInterest, greenChannel, thresh
     
 
     if showNeighbors:
-        scatterPoints, numNeighbors = batchCalculateNumNeighbors(scatterPoints, 15, 400)
+        scatterPoints, numNeighbors = batchCalculateNumNeighbors(scatterPoints, 25, 200, 100000)
     else:
         numNeighbors = np.zeros(scatterPoints.shape[0])
 
@@ -320,10 +321,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    #regionOfInterest = [[1400, 3750], # y
-    #                    [2300, 5400]] # x
+    regionOfInterest = [[1400, 3750], # y
+                        [2300, 5400]] # x
 
-    regionOfInterest = [[None, None], [None, None]]
+    #regionOfInterest = [[None, None], [None, None]]
 
     scatterThreads(args.inputPath, args.outputPath, regionOfInterest, args.channel,
                    args.threshold, args.spacing, args.downsample, args.fps,

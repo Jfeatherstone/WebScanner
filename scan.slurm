@@ -17,4 +17,4 @@ conda activate ml
 #python3 scatter_threads.py "/bucket/BandiU/Jack/DATA/WebScanning/2023-02-28_A" -o "images/2023-02-28_A_neighbors.gif" --ds 100 --neighbors
 #python3 scatter_threads.py "/bucket/BandiU/Jack/DATA/WebScanning/2023-02-28_B" -o "images/2023-02-28_B_neighbors.gif" --ds 100 --neighbors
 #python3 scatter_threads.py "/bucket/BandiU/Jack/DATA/WebScanning/2023-02-28_C" -o "images/2023-02-28_C_neighbors.gif" --ds 20 --neighbors
-python3 scatter_threads.py "/bucket/BandiU/Jack/DATA/WebScanning/2023-02-28_D" -o "images/2023-02-28_D_neighbors_high_t.gif" --ds 200 --neighbors -t 100
+python3 scatter_threads.py "/bucket/BandiU/Jack/DATA/WebScanning/2023-02-28_D" -o "images/2023-02-28_D_neighbors_batch.gif" --ds 100 --neighbors
