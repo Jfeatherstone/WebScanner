@@ -8,6 +8,8 @@ import tqdm
 import os
 from PIL import Image
 
+from scipy.spatial import KDTree
+
 # When providing an input path, we can either specify a video
 # file with one of the former extensions, or a directory containing
 # images with any of the latter extensions
@@ -220,23 +222,26 @@ def calculateNumNeighbors(scatterPoints, neighborThreshold, maxNeighbors=None):
         ignored as the calculation is performed, providing a speed-up.
     """
 
-    numNeighbors = np.zeros(scatterPoints.shape[0])
+    #numNeighbors = np.zeros(scatterPoints.shape[0])
     # If provided with a maximum number of neighbors (above which we
     # don't care about that point) we can reduce the number of calculations
     # as we go, which will speed up the computation.
-    includedPoints = np.ones(scatterPoints.shape[0], dtype=bool)
+    #includedPoints = np.ones(scatterPoints.shape[0], dtype=bool)
 
     # If not provided, set the maximum number of neighbors to be 1 greater
     # than the number of points (so all points will always be included).
-    if not maxNeighbors:
-        maxNeighbors = scatterPoints.shape[0] + 1
+    #if not maxNeighbors:
+    #    maxNeighbors = scatterPoints.shape[0] + 1
 
-    for i in tqdm.tqdm(range(scatterPoints.shape[0]), desc='Computing neighbors'):
-        # Euclidian distance
-        distances = np.sum((scatterPoints[i] - scatterPoints[includedPoints])**2, axis=-1)
-        # -1 to account for the point itself being counted as a neighbor
-        numNeighbors[i] = len(np.where(distances < neighborThreshold**2)[0]) - 1
-        includedPoints[i] = numNeighbors[i] <= maxNeighbors
+    #for i in tqdm.tqdm(range(scatterPoints.shape[0]), desc='Computing neighbors'):
+    #    # Euclidian distance
+    #    distances = np.sum((scatterPoints[i] - scatterPoints[includedPoints])**2, axis=-1)
+    #    # -1 to account for the point itself being counted as a neighbor
+    #    numNeighbors[i] = len(np.where(distances < neighborThreshold**2)[0]) - 1
+    #    includedPoints[i] = numNeighbors[i] <= maxNeighbors
+
+    kdTree = KDTree(scatterPoints)
+    numNeighbors = np.array([len(n) for n in kdTree.query_ball_point(scatterPoints, neighborThreshold)])
 
     return numNeighbors
         
@@ -264,9 +269,19 @@ def scatterThreads(inputPath, outputPath, regionOfInterest, greenChannel, thresh
     
 
     if showNeighbors:
-        scatterPoints, numNeighbors = batchCalculateNumNeighbors(scatterPoints, 25, 200, 100000)
+        scatterPoints, numNeighbors = calculateNumNeighbors(scatterPoints, 25)
     else:
         numNeighbors = np.zeros(scatterPoints.shape[0])
+
+    plt.hist(numNeighbors, bins=500)
+    plt.savefig('hist.png')
+    plt.close()
+
+    maxNeighbors = 100
+    oldNumPoints = len(scatterPoints)
+    scatterPoints = scatterPoints[np.where(numNeighbors < maxNeighbors)]
+    numNeighbors = numNeighbors[np.where(numNeighbors < maxNeighbors)]
+    print(f'Elimated {oldNumPoints - len(scatterPoints)} points via neighbor exclusion')
 
     images = []
     loop = 0
